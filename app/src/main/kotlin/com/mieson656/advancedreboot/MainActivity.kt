@@ -37,7 +37,8 @@ class MainActivity : ComponentActivity() {
 
         device = DeviceInfo.read()
         deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} ${device.model}"
-        deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})\nСистемная оболочка: ${device.shell}"
+        deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})
+Системная оболочка: ${device.shell}"
 
         renderCapabilities()
         progress.visibility = View.GONE
@@ -90,7 +91,9 @@ class MainActivity : ComponentActivity() {
             column.addView(MaterialButton(this).apply {
                 text = "Подключить Shizuku"
                 setOnClickListener {
-                    if (shizuku.isBinderReady()) {\n                        if (!shizuku.requestPermission()) showShizukuError()\n                    } else openShizuku()
+                    if (shizuku.isBinderReady()) {
+                        if (!shizuku.requestPermission()) showShizukuError()
+                    } else openShizuku()
                 }
             })
         }
@@ -140,7 +143,15 @@ class MainActivity : ComponentActivity() {
             }.show()
     }
 
-    private fun showShizukuServiceError() {\n        MaterialAlertDialogBuilder(this)\n            .setTitle("Shizuku User Service не запустился")\n            .setMessage("Разрешение Shizuku есть, но привилегированный сервис не удалось подключить. Перезапустите Shizuku и попробуйте снова.")\n            .setPositiveButton("Понятно", null)\n            .show()\n    }\n\n    private fun showShizukuError() {
+    private fun showShizukuServiceError() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Shizuku User Service не запустился")
+            .setMessage("Разрешение Shizuku есть, но привилегированный сервис не удалось подключить. Перезапустите Shizuku и попробуйте снова.")
+            .setPositiveButton("Понятно", null)
+            .show()
+    }
+
+    private fun showShizukuError() {
         MaterialAlertDialogBuilder(this)
             .setTitle("Shizuku недоступен")
             .setMessage("Запустите Shizuku и выдайте Advanced Reboot разрешение. Если Shizuku недоступен, используйте ADB-команду.")
