@@ -1,7 +1,5 @@
 package com.mieson656.advancedreboot
 
-import android.os.Build
-
 class CapabilityDetector {
     fun detect(device: DeviceInfo, shizukuAvailable: Boolean): List<Capability> {
         return RebootOperation.entries.map { operation ->
@@ -9,12 +7,13 @@ class CapabilityDetector {
                 RebootOperation.REBOOT -> privileged("reboot", operation, shizukuAvailable)
                 RebootOperation.RECOVERY -> privileged("recovery", operation, shizukuAvailable)
                 RebootOperation.BOOTLOADER -> privileged("bootloader", operation, shizukuAvailable)
-                RebootOperation.SHUTDOWN -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                        Capability(operation, CapabilityState.AVAILABLE, "Доступен штатный системный запрос.", "Android")
-                    else
-                        Capability(operation, CapabilityState.UNSUPPORTED, "Требуется Android 9 или новее.")
-                }
+                RebootOperation.SHUTDOWN -> Capability(
+                    operation,
+                    CapabilityState.NEEDS_ADB,
+                    "Обычное приложение не получает системное право выключения. Используйте Shizuku/ADB после подтверждения способа.",
+                    "ADB",
+                    adbCommand = "adb shell reboot -p"
+                )
                 RebootOperation.DOWNLOAD -> Capability(
                     operation,
                     CapabilityState.UNKNOWN,
