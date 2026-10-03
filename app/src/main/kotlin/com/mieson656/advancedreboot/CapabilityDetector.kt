@@ -31,7 +31,8 @@ class CapabilityDetector {
                 CapabilityState.AVAILABLE,
                 "Shizuku авторизован. Действие будет выполнено через привилегированный User Service.",
                 "Shizuku",
-                command(kind)
+                adbCommand = adbCommand(kind),
+                providerCommand = providerCommand(kind)
             )
         } else {
             Capability(
@@ -39,12 +40,20 @@ class CapabilityDetector {
                 CapabilityState.NEEDS_ADB,
                 "Для выполнения нужен Shizuku или ADB на ПК.",
                 "ADB",
-                command(kind)
+                adbCommand = adbCommand(kind),
+                providerCommand = providerCommand(kind)
             )
         }
     }
 
-    private fun command(kind: String): String = when (kind) {
+    private fun adbCommand(kind: String): String = when (kind) {
+        "reboot" -> "adb reboot"
+        "recovery" -> "adb reboot recovery"
+        "bootloader" -> "adb reboot bootloader"
+        else -> ""
+    }
+
+    private fun providerCommand(kind: String): String = when (kind) {
         "reboot" -> "reboot"
         "recovery" -> "reboot recovery"
         "bootloader" -> "reboot bootloader"
