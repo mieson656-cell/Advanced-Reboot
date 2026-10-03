@@ -1,15 +1,19 @@
 package com.mieson656.advancedreboot
 
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
 
 class MainActivity : ComponentActivity() {
@@ -19,7 +23,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var modesContainer: LinearLayout
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
-        if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (grantResult == PackageManager.PERMISSION_GRANTED) {
             renderCapabilities()
         }
     }
@@ -38,12 +42,19 @@ class MainActivity : ComponentActivity() {
         Shizuku.addRequestPermissionResultListener(permissionListener)
 
         device = DeviceInfo.read()
-        deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} \${device.model}"
-        deviceDetails.text = "Android \${device.androidVersion} (API \${device.apiLevel})\nСистемная оболочка: \${device.shell}"
+        deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} ${device.model}"
+        deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})\nСистемная оболочка: ${device.shell}"
 
         renderCapabilities()
         progress.visibility = View.GONE
         subtitle.text = "Проверка завершена"
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::device.isInitialized && ::shizuku.isInitialized) {
+            renderCapabilities()
+        }
     }
 
     private fun renderCapabilities() {
@@ -77,7 +88,7 @@ class MainActivity : ComponentActivity() {
         })
 
         column.addView(TextView(this).apply {
-            text = "Статус: \${statusText(capability.state)}"
+            text = "Статус: ${statusText(capability.state)}"
             textSize = 14f
             setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
         })
@@ -135,7 +146,7 @@ class MainActivity : ComponentActivity() {
 
     private fun confirmPrivilegedAction(capability: Capability) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Выполнить «\${capability.operation.title}»?")
+            .setTitle("Выполнить «${capability.operation.title}»?")
             .setMessage("Команда будет выполнена через Shizuku с привилегиями его текущего провайдера.")
             .setNegativeButton("Отмена", null)
             .setPositiveButton("Продолжить") { _, _ ->
@@ -145,16 +156,16 @@ class MainActivity : ComponentActivity() {
                         return@connect
                     }
 
-                    Thread {
+                    lifecycleScope.launch(Dispatchers.IO) {
                         val result = shizuku.execute(capability.providerCommand.orEmpty())
                         runOnUiThread {
-                            MaterialAlertDialogBuilder(this)
+                            MaterialAlertDialogBuilder(this@MainActivity)
                                 .setTitle(if (result.isSuccess) "Команда отправлена" else "Ошибка выполнения")
                                 .setMessage(result.getOrElse { it.message ?: "Неизвестная ошибка" })
                                 .setPositiveButton("Понятно", null)
                                 .show()
                         }
-                    }.start()
+                    }
                 }
             }
             .show()
@@ -187,7 +198,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showAdbInstructions(capability: Capability) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("ADB — \${capability.operation.title}")
+            .setTitle("ADB — ${capability.operation.title}")
             .setMessage(AdbInstructions.text(capability))
             .setPositiveButton("Понятно", null)
             .show()
