@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var device: DeviceInfo
     private lateinit var capabilities: List<Capability>
     private lateinit var shizuku: ShizukuBridge
+    private lateinit var deviceOwner: DeviceOwnerExecutor
     private lateinit var modesContainer: LinearLayout
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
         modesContainer = findViewById(R.id.modesContainer)
 
         shizuku = ShizukuBridge(this)
+        deviceOwner = DeviceOwnerExecutor(this)
         Shizuku.addRequestPermissionResultListener(permissionListener)
 
         device = DeviceInfo.read()
@@ -59,7 +61,7 @@ class MainActivity : ComponentActivity() {
 
     private fun renderCapabilities() {
         modesContainer.removeAllViews()
-        capabilities = CapabilityDetector().detect(device, shizuku.hasPermission())
+        capabilities = CapabilityDetector().detect(device, shizuku.hasPermission(), deviceOwner.isAvailable())
         capabilities.forEach { addCapability(modesContainer, it) }
     }
 
@@ -99,10 +101,20 @@ class MainActivity : ComponentActivity() {
             setPadding(0, 5, 0, 8)
         })
 
-        if (capability.state == CapabilityState.AVAILABLE && capability.provider == "Shizuku") {
+        if (capability.state == CapabilityState.AVAILABLE) {
             column.addView(MaterialButton(this).apply {
-                text = "Выполнить через Shizuku"
-                setOnClickListener { confirmPrivilegedAction(capability) }
+                text = when (capability.provider) {
+                    "Device Owner" -> "Перезагрузить через Android"
+                    "Shizuku" -> "Выполнить через Shizuku"
+                    else -> "Выполнить"
+                }
+                setOnClickListener {
+                    if (capability.provider == "Device Owner") {
+                        confirmDeviceOwnerReboot()
+                    } else {
+                        confirmPrivilegedAction(capability)
+                    }
+                }
             })
         }
 
@@ -142,6 +154,29 @@ class MainActivity : ComponentActivity() {
         CapabilityState.NEEDS_ADB -> "Нужен Shizuku или ADB на ПК"
         CapabilityState.UNSUPPORTED -> "Не поддерживается"
         CapabilityState.UNKNOWN -> "Не удалось определить"
+    }
+
+
+    private fun confirmDeviceOwnerReboot() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Перезагрузить устройство?")
+            .setMessage("Приложение обнаружило статус владельца устройства и использует системный DevicePolicyManager без Shizuku.")
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Перезагрузить") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val result = deviceOwner.reboot()
+                    runOnUiThread {
+                        if (!result.isSuccess) {
+                            MaterialAlertDialogBuilder(this@MainActivity)
+                                .setTitle("Ошибка выполнения")
+                                .setMessage(result.exceptionOrNull()?.message ?: "Неизвестная ошибка")
+                                .setPositiveButton("Понятно", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .show()
     }
 
     private fun confirmPrivilegedAction(capability: Capability) {
