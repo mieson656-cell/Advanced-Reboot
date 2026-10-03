@@ -37,8 +37,7 @@ class MainActivity : ComponentActivity() {
 
         device = DeviceInfo.read()
         deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} ${device.model}"
-        deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})
-Системная оболочка: ${device.shell}"
+        deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})\nСистемная оболочка: ${device.shell}"
 
         renderCapabilities()
         progress.visibility = View.GONE
