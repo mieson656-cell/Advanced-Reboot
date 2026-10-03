@@ -20,6 +20,13 @@ class CapabilityDetectorTest {
     }
 
     @Test
+    fun shutdownFallsBackToAdb() {
+        val c = CapabilityDetector().detect(device, false).first { it.operation == RebootOperation.SHUTDOWN }
+        assertEquals(CapabilityState.NEEDS_ADB, c.state)
+        assertEquals("adb shell reboot -p", c.adbCommand)
+    }
+
+    @Test
     fun downloadModeNeverInventsACommand() {
         val c = CapabilityDetector().detect(device, false).first { it.operation == RebootOperation.DOWNLOAD }
         assertEquals(CapabilityState.UNKNOWN, c.state)
