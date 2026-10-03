@@ -26,16 +26,28 @@ class CapabilityDetector {
 
     private fun privileged(kind: String, operation: RebootOperation, shizukuAvailable: Boolean): Capability {
         return if (shizukuAvailable) {
-            Capability(operation, CapabilityState.NEEDS_SHIZUKU, "Операция требует привилегированного провайдера.", "Shizuku", adbCommand = command(kind))
+            Capability(
+                operation,
+                CapabilityState.AVAILABLE,
+                "Shizuku авторизован. Действие будет выполнено через привилегированный User Service.",
+                "Shizuku",
+                command(kind)
+            )
         } else {
-            Capability(operation, CapabilityState.NEEDS_ADB, "Встроенный ADB-провайдер не подключён; используйте ПК.", "ADB", command(kind))
+            Capability(
+                operation,
+                CapabilityState.NEEDS_ADB,
+                "Для выполнения нужен Shizuku или ADB на ПК.",
+                "ADB",
+                command(kind)
+            )
         }
     }
 
     private fun command(kind: String): String = when (kind) {
-        "reboot" -> "adb reboot"
-        "recovery" -> "adb reboot recovery"
-        "bootloader" -> "adb reboot bootloader"
+        "reboot" -> "reboot"
+        "recovery" -> "reboot recovery"
+        "bootloader" -> "reboot bootloader"
         else -> ""
     }
 }
