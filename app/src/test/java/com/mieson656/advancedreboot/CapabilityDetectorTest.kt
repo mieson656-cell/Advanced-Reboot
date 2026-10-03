@@ -56,6 +56,16 @@ class CapabilityDetectorTest {
     }
 }
 
+class RebootUserServiceSecurityTest {
+    @Test
+    fun rejectsCommandsOutsideAllowlist() {
+        val service = RebootUserService()
+        assertEquals("error=SecurityException: команда не разрешена", service.execute("id"))
+        assertEquals("error=SecurityException: команда не разрешена", service.execute("reboot; id"))
+        assertEquals("error=SecurityException: команда не разрешена", service.execute("reboot recovery; id"))
+    }
+}
+
 class ShellDetectorTest {
     @Test
     fun detectsOneUiFromConfirmedProperty() {
@@ -75,21 +85,12 @@ class ShellDetectorTest {
 
     @Test
     fun usesUnconfirmedFallbackOnlyForKnownManufacturer() {
-        assertEquals(
-            "One UI (версия не подтверждена)",
-            ShellDetector.detect("Samsung") { null }
-        )
-        assertEquals(
-            "MIUI/HyperOS (версия не подтверждена)",
-            ShellDetector.detect("XIAOMI") { null }
-        )
+        assertEquals("One UI (версия не подтверждена)", ShellDetector.detect("Samsung") { null })
+        assertEquals("MIUI/HyperOS (версия не подтверждена)", ShellDetector.detect("XIAOMI") { null })
     }
 
     @Test
     fun unknownManufacturerDoesNotGetInventedShell() {
-        assertEquals(
-            "Не удалось определить",
-            ShellDetector.detect("TestBrand") { null }
-        )
+        assertEquals("Не удалось определить", ShellDetector.detect("TestBrand") { null })
     }
 }
