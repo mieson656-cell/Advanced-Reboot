@@ -1,6 +1,5 @@
 package com.mieson656.advancedreboot
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
@@ -103,13 +102,6 @@ class MainActivity : ComponentActivity() {
             })
         }
 
-        if (capability.operation == RebootOperation.SHUTDOWN &&
-            capability.state == CapabilityState.AVAILABLE) {
-            column.addView(MaterialButton(this).apply {
-                text = "Выключить"
-                setOnClickListener { requestShutdown() }
-            })
-        }
 
         card.addView(column)
         container.addView(card)
@@ -159,24 +151,6 @@ class MainActivity : ComponentActivity() {
     private fun openShizuku() {
         val intent = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
         if (intent != null) startActivity(intent) else showShizukuError()
-    }
-
-    private fun requestShutdown() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Выключить устройство?")
-            .setMessage("Телефон будет передан штатному системному механизму выключения.")
-            .setNegativeButton("Отмена", null)
-            .setPositiveButton("Продолжить") { _, _ ->
-                try {
-                    startActivity(Intent(Intent.ACTION_REQUEST_SHUTDOWN).apply {
-                        putExtra(Intent.EXTRA_KEY_CONFIRM, true)
-                    })
-                } catch (_: Exception) {
-                    showAdbInstructions(
-                        Capability(RebootOperation.SHUTDOWN, CapabilityState.NEEDS_ADB, "Системный запрос недоступен.", "ADB")
-                    )
-                }
-            }.show()
     }
 
     private fun showAdbInstructions(capability: Capability) {
