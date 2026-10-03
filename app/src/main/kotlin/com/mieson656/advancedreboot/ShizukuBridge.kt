@@ -41,7 +41,8 @@ class ShizukuBridge(private val context: Context) : PrivilegedExecutor {
             ComponentName(context, RebootUserService::class.java)
         ).version(1).processNameSuffix("reboot").daemon(false)
 
-        val newConnection = object : ServiceConnection {
+        lateinit var newConnection: ServiceConnection
+        newConnection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
                 if (binder == null) {
                     service = null; connection = null; onReady(false); return
