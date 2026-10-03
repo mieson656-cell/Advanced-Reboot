@@ -11,10 +11,17 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import rikka.shizuku.Shizuku
 
 class MainActivity : ComponentActivity() {
     private lateinit var device: DeviceInfo
     private lateinit var capabilities: List<Capability>
+    private lateinit var shizuku: ShizukuBridge
+    private lateinit var modesContainer: LinearLayout
+
+    private val permissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
+        if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) renderCapabilities()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,17 +31,24 @@ class MainActivity : ComponentActivity() {
         val subtitle = findViewById<TextView>(R.id.subtitle)
         val deviceName = findViewById<TextView>(R.id.deviceName)
         val deviceDetails = findViewById<TextView>(R.id.deviceDetails)
-        val container = findViewById<LinearLayout>(R.id.modesContainer)
+        modesContainer = findViewById(R.id.modesContainer)
+
+        shizuku = ShizukuBridge(this)
+        Shizuku.addRequestPermissionResultListener(permissionListener)
 
         device = DeviceInfo.read()
-        capabilities = CapabilityDetector().detect(device, ShizukuBridge(this).isAvailable())
-
         deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} ${device.model}"
         deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})\nСистемная оболочка: ${device.shell}"
 
-        capabilities.forEach { addCapability(container, it) }
+        renderCapabilities()
         progress.visibility = View.GONE
         subtitle.text = "Проверка завершена"
+    }
+
+    private fun renderCapabilities() {
+        modesContainer.removeAllViews()
+        capabilities = CapabilityDetector().detect(device, shizuku.hasPermission())
+        capabilities.forEach { addCapability(modesContainer, it) }
     }
 
     private fun addCapability(container: LinearLayout, capability: Capability) {
@@ -65,12 +79,30 @@ class MainActivity : ComponentActivity() {
             textSize = 13f
             setPadding(0, 5, 0, 8)
         })
+
+        if (capability.state == CapabilityState.AVAILABLE && capability.provider == "Shizuku") {
+            column.addView(MaterialButton(this).apply {
+                text = "Выполнить через Shizuku"
+                setOnClickListener { confirmPrivilegedAction(capability) }
+            })
+        }
+
+        if (capability.state == CapabilityState.NEEDS_ADB) {
+            column.addView(MaterialButton(this).apply {
+                text = "Подключить Shizuku"
+                setOnClickListener {
+                    if (shizuku.isBinderReady()) shizuku.requestPermission() else openShizuku()
+                }
+            })
+        }
+
         capability.adbCommand?.let {
             column.addView(MaterialButton(this).apply {
                 text = "Показать ADB-команду"
                 setOnClickListener { showAdbInstructions(capability) }
             })
         }
+
         if (capability.operation == RebootOperation.SHUTDOWN &&
             capability.state == CapabilityState.AVAILABLE) {
             column.addView(MaterialButton(this).apply {
@@ -78,6 +110,7 @@ class MainActivity : ComponentActivity() {
                 setOnClickListener { requestShutdown() }
             })
         }
+
         card.addView(column)
         container.addView(card)
     }
@@ -85,9 +118,47 @@ class MainActivity : ComponentActivity() {
     private fun statusText(state: CapabilityState): String = when (state) {
         CapabilityState.AVAILABLE -> "Доступно"
         CapabilityState.NEEDS_SHIZUKU -> "Нужен Shizuku"
-        CapabilityState.NEEDS_ADB -> "Нужен ADB на ПК"
+        CapabilityState.NEEDS_ADB -> "Нужен Shizuku или ADB на ПК"
         CapabilityState.UNSUPPORTED -> "Не поддерживается"
         CapabilityState.UNKNOWN -> "Не удалось определить"
+    }
+
+    private fun confirmPrivilegedAction(capability: Capability) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Выполнить «${capability.operation.title}»?")
+            .setMessage("Команда будет выполнена через Shizuku с привилегиями его текущего провайдера.")
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Продолжить") { _, _ ->
+                shizuku.connect { ready ->
+                    if (!ready) {
+                        runOnUiThread { showShizukuError() }
+                        return@connect
+                    }
+                    Thread {
+                        val result = shizuku.execute(capability.providerCommand ?: "")
+                        runOnUiThread {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle(if (result.isSuccess) "Команда отправлена" else "Ошибка выполнения")
+                                .setMessage(result.getOrElse { it.message ?: "Неизвестная ошибка" })
+                                .setPositiveButton("Понятно", null)
+                                .show()
+                        }
+                    }.start()
+                }
+            }.show()
+    }
+
+    private fun showShizukuError() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Shizuku недоступен")
+            .setMessage("Запустите Shizuku и выдайте Advanced Reboot разрешение. Если Shizuku недоступен, используйте ADB-команду.")
+            .setPositiveButton("Понятно", null)
+            .show()
+    }
+
+    private fun openShizuku() {
+        val intent = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+        if (intent != null) startActivity(intent) else showShizukuError()
     }
 
     private fun requestShutdown() {
@@ -102,12 +173,7 @@ class MainActivity : ComponentActivity() {
                     })
                 } catch (_: Exception) {
                     showAdbInstructions(
-                        Capability(
-                            RebootOperation.SHUTDOWN,
-                            CapabilityState.NEEDS_ADB,
-                            "Системный запрос недоступен.",
-                            "ADB"
-                        )
+                        Capability(RebootOperation.SHUTDOWN, CapabilityState.NEEDS_ADB, "Системный запрос недоступен.", "ADB")
                     )
                 }
             }.show()
@@ -119,5 +185,11 @@ class MainActivity : ComponentActivity() {
             .setMessage(AdbInstructions.text(capability))
             .setPositiveButton("Понятно", null)
             .show()
+    }
+
+    override fun onDestroy() {
+        Shizuku.removeRequestPermissionResultListener(permissionListener)
+        shizuku.disconnect()
+        super.onDestroy()
     }
 }
