@@ -19,7 +19,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var modesContainer: LinearLayout
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
-        if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) renderCapabilities()
+        if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            renderCapabilities()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,8 +38,8 @@ class MainActivity : ComponentActivity() {
         Shizuku.addRequestPermissionResultListener(permissionListener)
 
         device = DeviceInfo.read()
-        deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} ${device.model}"
-        deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})\nСистемная оболочка: ${device.shell}"
+        deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} \${device.model}"
+        deviceDetails.text = "Android \${device.androidVersion} (API \${device.apiLevel})\nСистемная оболочка: \${device.shell}"
 
         renderCapabilities()
         progress.visibility = View.GONE
@@ -57,22 +59,29 @@ class MainActivity : ComponentActivity() {
             setContentPadding(18, 16, 18, 16)
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 12 }
         }
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
         column.addView(TextView(this).apply {
             text = capability.operation.title
             textSize = 18f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
+
         column.addView(TextView(this).apply {
             text = capability.operation.description
             textSize = 14f
             setPadding(0, 6, 0, 8)
         })
+
         column.addView(TextView(this).apply {
-            text = "Статус: ${statusText(capability.state)}"
+            text = "Статус: \${statusText(capability.state)}"
             textSize = 14f
             setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
         })
+
         column.addView(TextView(this).apply {
             text = capability.reason
             textSize = 13f
@@ -91,8 +100,16 @@ class MainActivity : ComponentActivity() {
                 text = "Подключить Shizuku"
                 setOnClickListener {
                     if (shizuku.isBinderReady()) {
-                        if (!shizuku.requestPermission()) showShizukuError()
-                    } else openShizuku()
+                        if (!shizuku.hasPermission()) {
+                            if (!shizuku.requestPermission()) {
+                                showShizukuError()
+                            }
+                        } else {
+                            renderCapabilities()
+                        }
+                    } else {
+                        openShizuku()
+                    }
                 }
             })
         }
@@ -103,7 +120,6 @@ class MainActivity : ComponentActivity() {
                 setOnClickListener { showAdbInstructions(capability) }
             })
         }
-
 
         card.addView(column)
         container.addView(card)
@@ -119,17 +135,18 @@ class MainActivity : ComponentActivity() {
 
     private fun confirmPrivilegedAction(capability: Capability) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Выполнить «${capability.operation.title}»?")
+            .setTitle("Выполнить «\${capability.operation.title}»?")
             .setMessage("Команда будет выполнена через Shizuku с привилегиями его текущего провайдера.")
             .setNegativeButton("Отмена", null)
             .setPositiveButton("Продолжить") { _, _ ->
                 shizuku.connect { ready ->
                     if (!ready) {
-                        runOnUiThread { showShizukuError() }
+                        runOnUiThread { showShizukuServiceError() }
                         return@connect
                     }
+
                     Thread {
-                        val result = shizuku.execute(capability.providerCommand ?: "")
+                        val result = shizuku.execute(capability.providerCommand.orEmpty())
                         runOnUiThread {
                             MaterialAlertDialogBuilder(this)
                                 .setTitle(if (result.isSuccess) "Команда отправлена" else "Ошибка выполнения")
@@ -139,7 +156,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }.start()
                 }
-            }.show()
+            }
+            .show()
     }
 
     private fun showShizukuServiceError() {
@@ -160,12 +178,16 @@ class MainActivity : ComponentActivity() {
 
     private fun openShizuku() {
         val intent = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-        if (intent != null) startActivity(intent) else showShizukuError()
+        if (intent != null) {
+            startActivity(intent)
+        } else {
+            showShizukuError()
+        }
     }
 
     private fun showAdbInstructions(capability: Capability) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("ADB — ${capability.operation.title}")
+            .setTitle("ADB — \${capability.operation.title}")
             .setMessage(AdbInstructions.text(capability))
             .setPositiveButton("Понятно", null)
             .show()
