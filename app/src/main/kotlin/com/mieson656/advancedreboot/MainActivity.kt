@@ -1,7 +1,6 @@
 package com.mieson656.advancedreboot
 
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
@@ -14,7 +13,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 
 class MainActivity : ComponentActivity() {
-    private data class Mode(val title: String, val description: String, val state: String, val action: (() -> Unit)? = null)
+    private lateinit var device: DeviceInfo
+    private lateinit var capabilities: List<Capability>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,66 +26,18 @@ class MainActivity : ComponentActivity() {
         val deviceDetails = findViewById<TextView>(R.id.deviceDetails)
         val container = findViewById<LinearLayout>(R.id.modesContainer)
 
-        deviceName.text = "\${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} \${Build.MODEL}"
-        deviceDetails.text = "Android \${Build.VERSION.RELEASE} (API \${Build.VERSION.SDK_INT})\\nСистемная оболочка: \${detectShell()}"
+        device = DeviceInfo.read()
+        capabilities = CapabilityDetector().detect(device, ShizukuBridge(this).isAvailable())
 
-        listOf(
-            Mode("Обычная перезагрузка", "Перезагрузка через привилегированный системный механизм.", "ADB / Shizuku / root") { showAdbInstructions("reboot") },
-            Mode("Recovery", "Переход в recovery. Обычно: adb reboot recovery.", "ADB / Shizuku / root") { showAdbInstructions("recovery") },
-            Mode("Download Mode", "OEM-режим загрузки. Команда зависит от производителя и модели.", "ADB: зависит от устройства • Shizuku: не гарантируется") { showAdbInstructions("download") },
-            Mode("Bootloader / Fastboot", "Загрузка bootloader/fastboot, если поддерживается устройством.", "ADB / Shizuku / root") { showAdbInstructions("bootloader") },
-            Mode("Выключение", "Запрос штатного выключения устройства.", if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) "Системный запрос" else "Не удалось определить") { requestShutdown() }
-        ).forEach { addMode(container, it) }
+        deviceName.text = "${device.manufacturer.replaceFirstChar { it.uppercase() }} ${device.model}"
+        deviceDetails.text = "Android ${device.androidVersion} (API ${device.apiLevel})\nСистемная оболочка: ${device.shell}"
 
+        capabilities.forEach { addCapability(container, it) }
         progress.visibility = View.GONE
         subtitle.text = "Проверка завершена"
     }
 
-    private fun detectShell(): String {
-        val props = listOf(
-            "ro.build.version.oneui" to "One UI",
-            "ro.miui.ui.version.name" to "MIUI",
-            "ro.build.version.hyperos" to "HyperOS",
-            "ro.oxygen.version" to "OxygenOS",
-            "ro.build.ui.version" to "System UI"
-        )
-        for ((key, label) in props) {
-            val value = getSystemProperty(key)
-            if (!value.isNullOrBlank()) return "\$label \$value"
-        }
-        return when {
-            Build.MANUFACTURER.equals("samsung", true) -> "One UI (версия не подтверждена)"
-            Build.MANUFACTURER.equals("xiaomi", true) -> "MIUI/HyperOS (версия не подтверждена)"
-            else -> "Не удалось определить"
-        }
-    }
-
-    private fun getSystemProperty(name: String): String? = try {
-        Runtime.getRuntime().exec(arrayOf("getprop", name)).inputStream.bufferedReader().use { it.readLine()?.trim() }
-    } catch (_: Exception) { null }
-
-    private fun requestShutdown() {
-        try {
-            startActivity(Intent(Intent.ACTION_REQUEST_SHUTDOWN).apply {
-                putExtra(Intent.EXTRA_KEY_CONFIRM, true)
-            })
-        } catch (_: Exception) {
-            showAdbInstructions("shutdown")
-        }
-    }
-
-    private fun showAdbInstructions(mode: String) {
-        val message = when (mode) {
-            "reboot" -> "1. Включите «Параметры разработчика» и «Отладка по USB».\\n\\n2. Подключите телефон к компьютеру.\\n\\n3. Разрешите отладку на телефоне.\\n\\n4. Откройте CMD/Terminal в папке Android platform-tools.\\n\\n5. Выполните:\\n\\nadb reboot\\n\\nПока ADB-провайдер не подключён, приложение показывает инструкцию, а не притворяется, что выполняет команду."
-            "recovery" -> "1. Включите отладку по USB.\\n2. Подключите телефон к компьютеру.\\n3. Подтвердите RSA-запрос.\\n4. Выполните:\\n\\nadb reboot recovery"
-            "bootloader" -> "1. Включите отладку по USB.\\n2. Подключите телефон к компьютеру.\\n3. Подтвердите RSA-запрос.\\n4. Выполните:\\n\\nadb reboot bootloader\\n\\nЕсли устройство не поддерживает этот переход, команда может не сработать."
-            "download" -> "1. Включите отладку по USB и подключите телефон.\\n2. Подтвердите RSA-запрос.\\n3. Для Download Mode используйте только способ, подтверждённый для вашей модели.\\n\\nУ производителей нет одной универсальной ADB-команды для этого режима, поэтому приложение позже будет выбирать способ по базе возможностей устройства."
-            else -> "1. Включите отладку по USB.\\n2. Подключите телефон к компьютеру.\\n3. Разрешите USB debugging.\\n4. Выполните подходящую ADB-команду для вашей модели."
-        }
-        MaterialAlertDialogBuilder(this).setTitle("Нужен ADB").setMessage(message).setPositiveButton("Понятно", null).show()
-    }
-
-    private fun addMode(container: LinearLayout, mode: Mode) {
+    private fun addCapability(container: LinearLayout, capability: Capability) {
         val card = MaterialCardView(this).apply {
             radius = 20f
             strokeWidth = 1
@@ -94,20 +46,78 @@ class MainActivity : ComponentActivity() {
         }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         column.addView(TextView(this).apply {
-            text = mode.title; textSize = 18f
+            text = capability.operation.title
+            textSize = 18f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         column.addView(TextView(this).apply {
-            text = mode.description; textSize = 14f; setPadding(0, 6, 0, 8)
+            text = capability.operation.description
+            textSize = 14f
+            setPadding(0, 6, 0, 8)
         })
         column.addView(TextView(this).apply {
-            text = "Способ: \${mode.state}"; textSize = 13f
+            text = "Статус: ${statusText(capability.state)}"
+            textSize = 14f
             setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
         })
-        if (mode.action != null) column.addView(MaterialButton(this).apply {
-            text = "Как выполнить"; setOnClickListener { mode.action.invoke() }
+        column.addView(TextView(this).apply {
+            text = capability.reason
+            textSize = 13f
+            setPadding(0, 5, 0, 8)
         })
+        capability.adbCommand?.let {
+            column.addView(MaterialButton(this).apply {
+                text = "Показать ADB-команду"
+                setOnClickListener { showAdbInstructions(capability) }
+            })
+        }
+        if (capability.operation == RebootOperation.SHUTDOWN &&
+            capability.state == CapabilityState.AVAILABLE) {
+            column.addView(MaterialButton(this).apply {
+                text = "Выключить"
+                setOnClickListener { requestShutdown() }
+            })
+        }
         card.addView(column)
         container.addView(card)
+    }
+
+    private fun statusText(state: CapabilityState): String = when (state) {
+        CapabilityState.AVAILABLE -> "Доступно"
+        CapabilityState.NEEDS_SHIZUKU -> "Нужен Shizuku"
+        CapabilityState.NEEDS_ADB -> "Нужен ADB на ПК"
+        CapabilityState.UNSUPPORTED -> "Не поддерживается"
+        CapabilityState.UNKNOWN -> "Не удалось определить"
+    }
+
+    private fun requestShutdown() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Выключить устройство?")
+            .setMessage("Телефон будет передан штатному системному механизму выключения.")
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Продолжить") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_REQUEST_SHUTDOWN).apply {
+                        putExtra(Intent.EXTRA_KEY_CONFIRM, true)
+                    })
+                } catch (_: Exception) {
+                    showAdbInstructions(
+                        Capability(
+                            RebootOperation.SHUTDOWN,
+                            CapabilityState.NEEDS_ADB,
+                            "Системный запрос недоступен.",
+                            "ADB"
+                        )
+                    )
+                }
+            }.show()
+    }
+
+    private fun showAdbInstructions(capability: Capability) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("ADB — ${capability.operation.title}")
+            .setMessage(AdbInstructions.text(capability))
+            .setPositiveButton("Понятно", null)
+            .show()
     }
 }
