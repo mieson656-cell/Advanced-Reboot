@@ -27,6 +27,13 @@ class CapabilityDetectorTest {
     }
 
     @Test
+    fun shutdownUsesShizukuWhenAuthorized() {
+        val c = CapabilityDetector().detect(device, true).first { it.operation == RebootOperation.SHUTDOWN }
+        assertEquals(CapabilityState.AVAILABLE, c.state)
+        assertEquals("reboot -p", c.providerCommand)
+    }
+
+    @Test
     fun downloadModeNeverInventsACommand() {
         val c = CapabilityDetector().detect(device, false).first { it.operation == RebootOperation.DOWNLOAD }
         assertEquals(CapabilityState.UNKNOWN, c.state)
