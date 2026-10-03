@@ -1,6 +1,7 @@
 package com.mieson656.advancedreboot
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CapabilityDetectorTest {
@@ -20,6 +21,13 @@ class CapabilityDetectorTest {
     }
 
     @Test
+    fun bootloaderUsesGenericAdbCommand() {
+        val c = CapabilityDetector().detect(device, false).first { it.operation == RebootOperation.BOOTLOADER }
+        assertEquals(CapabilityState.NEEDS_ADB, c.state)
+        assertEquals("adb reboot bootloader", c.adbCommand)
+    }
+
+    @Test
     fun shutdownFallsBackToAdb() {
         val c = CapabilityDetector().detect(device, false).first { it.operation == RebootOperation.SHUTDOWN }
         assertEquals(CapabilityState.NEEDS_ADB, c.state)
@@ -27,16 +35,61 @@ class CapabilityDetectorTest {
     }
 
     @Test
-    fun shutdownUsesShizukuWhenAuthorized() {
-        val c = CapabilityDetector().detect(device, true).first { it.operation == RebootOperation.SHUTDOWN }
-        assertEquals(CapabilityState.AVAILABLE, c.state)
-        assertEquals("reboot -p", c.providerCommand)
+    fun privilegedOperationsUseShizukuWhenAuthorized() {
+        val capabilities = CapabilityDetector().detect(device, true)
+
+        assertEquals("reboot", capabilities.first { it.operation == RebootOperation.REBOOT }.providerCommand)
+        assertEquals("reboot recovery", capabilities.first { it.operation == RebootOperation.RECOVERY }.providerCommand)
+        assertEquals("reboot bootloader", capabilities.first { it.operation == RebootOperation.BOOTLOADER }.providerCommand)
+
+        val shutdown = capabilities.first { it.operation == RebootOperation.SHUTDOWN }
+        assertEquals(CapabilityState.AVAILABLE, shutdown.state)
+        assertEquals("reboot -p", shutdown.providerCommand)
     }
 
     @Test
     fun downloadModeNeverInventsACommand() {
         val c = CapabilityDetector().detect(device, false).first { it.operation == RebootOperation.DOWNLOAD }
         assertEquals(CapabilityState.UNKNOWN, c.state)
-        assertEquals(null, c.adbCommand)
+        assertNull(c.adbCommand)
+        assertNull(c.providerCommand)
+    }
+}
+
+class ShellDetectorTest {
+    @Test
+    fun detectsOneUiFromConfirmedProperty() {
+        val result = ShellDetector.detect("samsung") { key ->
+            if (key == "ro.build.version.oneui") "8.0" else null
+        }
+        assertEquals("One UI 8.0", result)
+    }
+
+    @Test
+    fun detectsMiuiFromConfirmedProperty() {
+        val result = ShellDetector.detect("xiaomi") { key ->
+            if (key == "ro.miui.ui.version.name") "14" else null
+        }
+        assertEquals("MIUI 14", result)
+    }
+
+    @Test
+    fun usesUnconfirmedFallbackOnlyForKnownManufacturer() {
+        assertEquals(
+            "One UI (версия не подтверждена)",
+            ShellDetector.detect("Samsung") { null }
+        )
+        assertEquals(
+            "MIUI/HyperOS (версия не подтверждена)",
+            ShellDetector.detect("XIAOMI") { null }
+        )
+    }
+
+    @Test
+    fun unknownManufacturerDoesNotGetInventedShell() {
+        assertEquals(
+            "Не удалось определить",
+            ShellDetector.detect("TestBrand") { null }
+        )
     }
 }
