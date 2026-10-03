@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
             column.addView(MaterialButton(this).apply {
                 text = "Подключить Shizuku"
                 setOnClickListener {
-                    if (shizuku.isBinderReady()) shizuku.requestPermission() else openShizuku()
+                    if (shizuku.isBinderReady()) {\n                        if (!shizuku.requestPermission()) showShizukuError()\n                    } else openShizuku()
                 }
             })
         }
@@ -140,7 +140,7 @@ class MainActivity : ComponentActivity() {
             }.show()
     }
 
-    private fun showShizukuError() {
+    private fun showShizukuServiceError() {\n        MaterialAlertDialogBuilder(this)\n            .setTitle("Shizuku User Service не запустился")\n            .setMessage("Разрешение Shizuku есть, но привилегированный сервис не удалось подключить. Перезапустите Shizuku и попробуйте снова.")\n            .setPositiveButton("Понятно", null)\n            .show()\n    }\n\n    private fun showShizukuError() {
         MaterialAlertDialogBuilder(this)
             .setTitle("Shizuku недоступен")
             .setMessage("Запустите Shizuku и выдайте Advanced Reboot разрешение. Если Shizuku недоступен, используйте ADB-команду.")
