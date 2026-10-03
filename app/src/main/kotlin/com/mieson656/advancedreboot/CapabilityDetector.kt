@@ -7,13 +7,7 @@ class CapabilityDetector {
                 RebootOperation.REBOOT -> privileged("reboot", operation, shizukuAvailable)
                 RebootOperation.RECOVERY -> privileged("recovery", operation, shizukuAvailable)
                 RebootOperation.BOOTLOADER -> privileged("bootloader", operation, shizukuAvailable)
-                RebootOperation.SHUTDOWN -> Capability(
-                    operation,
-                    CapabilityState.NEEDS_ADB,
-                    "Обычное приложение не получает системное право выключения. Используйте Shizuku/ADB после подтверждения способа.",
-                    "ADB",
-                    adbCommand = "adb shell reboot -p"
-                )
+                RebootOperation.SHUTDOWN -> privileged("shutdown", operation, shizukuAvailable)
                 RebootOperation.DOWNLOAD -> Capability(
                     operation,
                     CapabilityState.UNKNOWN,
@@ -24,6 +18,7 @@ class CapabilityDetector {
     }
 
     private fun privileged(kind: String, operation: RebootOperation, shizukuAvailable: Boolean): Capability {
+        val providerCommand = providerCommand(kind)
         return if (shizukuAvailable) {
             Capability(
                 operation,
@@ -31,7 +26,7 @@ class CapabilityDetector {
                 "Shizuku авторизован. Действие будет выполнено через привилегированный User Service.",
                 "Shizuku",
                 adbCommand = adbCommand(kind),
-                providerCommand = providerCommand(kind)
+                providerCommand = providerCommand
             )
         } else {
             Capability(
@@ -40,7 +35,7 @@ class CapabilityDetector {
                 "Для выполнения нужен Shizuku или ADB на ПК.",
                 "ADB",
                 adbCommand = adbCommand(kind),
-                providerCommand = providerCommand(kind)
+                providerCommand = providerCommand
             )
         }
     }
@@ -49,6 +44,7 @@ class CapabilityDetector {
         "reboot" -> "adb reboot"
         "recovery" -> "adb reboot recovery"
         "bootloader" -> "adb reboot bootloader"
+        "shutdown" -> "adb shell reboot -p"
         else -> ""
     }
 
@@ -56,6 +52,7 @@ class CapabilityDetector {
         "reboot" -> "reboot"
         "recovery" -> "reboot recovery"
         "bootloader" -> "reboot bootloader"
+        "shutdown" -> "reboot -p"
         else -> ""
     }
 }
