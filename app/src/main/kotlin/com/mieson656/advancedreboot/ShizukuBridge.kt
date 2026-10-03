@@ -15,90 +15,158 @@ class ShizukuBridge(private val context: Context) : PrivilegedExecutor {
     private var service: IRebootUserService? = null
     private var connection: ServiceConnection? = null
     private var boundArgs: Shizuku.UserServiceArgs? = null
+    private val pendingCallbacks = mutableListOf<(Boolean) -> Unit>()
 
     fun isBinderReady(): Boolean = try {
         Shizuku.pingBinder()
-    } catch (_: Throwable) { false }
+    } catch (_: Throwable) {
+        false
+    }
 
     fun hasPermission(): Boolean = try {
         isBinderReady() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-    } catch (_: Throwable) { false }
+    } catch (_: Throwable) {
+        false
+    }
 
     fun requestPermission(): Boolean {
         if (!isBinderReady()) return false
         if (hasPermission()) return true
-        return try { Shizuku.requestPermission(REQUEST_CODE); true } catch (_: Throwable) { false }
+        return try {
+            Shizuku.requestPermission(REQUEST_CODE)
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     fun isServiceConnected(): Boolean = service != null
 
     fun connect(onReady: (Boolean) -> Unit) {
-        if (!hasPermission()) { onReady(false); return }
-        if (service != null) { onReady(true); return }
-        if (connection != null) { onReady(false); return }
+        if (!hasPermission()) {
+            onReady(false)
+            return
+        }
+
+        service?.let {
+            onReady(true)
+            return
+        }
+
+        pendingCallbacks += onReady
+        if (connection != null) return
 
         val args = Shizuku.UserServiceArgs(
             ComponentName(context, RebootUserService::class.java)
-        ).version(1).processNameSuffix("reboot").daemon(false)
+        ).version(1)
+            .processNameSuffix("reboot")
+            .daemon(false)
 
         lateinit var newConnection: ServiceConnection
         newConnection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                if (binder == null) {
-                    service = null; connection = null; onReady(false); return
-                }
-                val remote = IRebootUserService.Stub.asInterface(binder)
+                val remote = binder?.let(IRebootUserService.Stub::asInterface)
                 service = remote
-                onReady(remote != null)
+                connection = if (remote != null) newConnection else null
+                if (remote == null) {
+                    boundArgs = null
+                }
+                val callbacks = pendingCallbacks.toList()
+                pendingCallbacks.clear()
+                callbacks.forEach { it(remote != null) }
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
-                service = null; connection = null
+                service = null
+                connection = null
+                boundArgs = null
             }
 
             override fun onBindingDied(name: ComponentName?) {
-                service = null; connection = null
+                service = null
+                connection = null
+                boundArgs = null
                 tryUnbind(args, newConnection)
+                val callbacks = pendingCallbacks.toList()
+                pendingCallbacks.clear()
+                callbacks.forEach { it(false) }
             }
 
             override fun onNullBinding(name: ComponentName?) {
-                service = null; connection = null; onReady(false)
+                service = null
+                connection = null
+                boundArgs = null
+                val callbacks = pendingCallbacks.toList()
+                pendingCallbacks.clear()
+                callbacks.forEach { it(false) }
             }
         }
+
         connection = newConnection
         boundArgs = args
+
         try {
             Shizuku.bindUserService(args, newConnection)
         } catch (_: Throwable) {
-            connection = null; boundArgs = null; service = null; onReady(false)
+            connection = null
+            boundArgs = null
+            val callbacks = pendingCallbacks.toList()
+            pendingCallbacks.clear()
+            callbacks.forEach { it(false) }
         }
     }
 
     private fun tryUnbind(args: Shizuku.UserServiceArgs, connection: ServiceConnection) {
-        try { Shizuku.unbindUserService(args, connection, true) } catch (_: Throwable) { }
+        try {
+            Shizuku.unbindUserService(args, connection, true)
+        } catch (_: Throwable) {
+        }
     }
 
     fun disconnect() {
         val current = connection
         val args = boundArgs
-        if (current != null && args != null) tryUnbind(args, current)
-        connection = null; boundArgs = null; service = null
+        if (current != null && args != null) {
+            tryUnbind(args, current)
+        }
+        connection = null
+        boundArgs = null
+        service = null
+        pendingCallbacks.clear()
     }
 
     override fun isAvailable(): Boolean = hasPermission() && isBinderReady()
 
     override fun execute(command: String): Result<String> {
         val cleanCommand = command.trim()
-        if (cleanCommand.isEmpty()) return Result.failure(IllegalArgumentException("Пустая команда"))
-        if (!isAvailable()) return Result.failure(IllegalStateException("Shizuku недоступен или разрешение отозвано"))
-        val current = service ?: return Result.failure(IllegalStateException("Shizuku User Service не подключён"))
+        if (cleanCommand.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Пустая команда"))
+        }
+        if (!isAvailable()) {
+            return Result.failure(IllegalStateException("Shizuku недоступен или разрешение отозвано"))
+        }
+        val current = service
+            ?: return Result.failure(IllegalStateException("Shizuku User Service не подключён"))
+
         return try {
             val response = current.execute(cleanCommand)
-            if (response.startsWith("exit=0")) Result.success(response)
-            else Result.failure(IllegalStateException(response.ifBlank { "Команда завершилась с ошибкой" }))
+            if (response.startsWith("exit=0")) {
+                Result.success(response)
+            } else {
+                Result.failure(
+                    IllegalStateException(response.ifBlank { "Команда завершилась с ошибкой" })
+                )
+            }
         } catch (e: Throwable) {
             service = null
-            Result.failure(IllegalStateException("Не удалось выполнить команду через Shizuku: " + (e.message ?: e.javaClass.simpleName), e))
+            connection = null
+            Result.failure(
+                IllegalStateException(
+                    "Не удалось выполнить команду через Shizuku: " +
+                        (e.message ?: e.javaClass.simpleName),
+                    e
+                )
+            )
         }
     }
 }
