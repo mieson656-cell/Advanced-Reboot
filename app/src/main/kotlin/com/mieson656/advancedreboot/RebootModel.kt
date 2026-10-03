@@ -21,5 +21,6 @@ data class Capability(
     val state: CapabilityState,
     val reason: String,
     val provider: String? = null,
-    val adbCommand: String? = null
+    val adbCommand: String? = null,
+    val providerCommand: String? = null
 )
