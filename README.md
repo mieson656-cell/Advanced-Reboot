@@ -1,21 +1,44 @@
 # Advanced Reboot
 
-Android utility for diagnosing device reboot/power capabilities without pretending that unsupported operations are available.
+Advanced Reboot is an Android utility for detecting and exposing reboot/power operations without pretending that unsupported operations are available.
 
-## Current architecture
+## What it supports
 
-- Device/OEM/Android/shell detection.
-- Capability model with explicit states.
-- Normal Android shutdown request.
-- Shizuku integration through a dedicated User Service for generic reboot, recovery and bootloader commands.
-- ADB fallback instructions for PC command line.
-- Download Mode stays unknown until a model-specific method is confirmed.
-- JVM tests for capability selection.
-- GitHub Actions builds the debug APK and uploads it as an artifact.
+- Normal reboot.
+- Recovery.
+- Bootloader / Fastboot.
+- Shutdown.
+- Device and Android version information.
+- Basic OEM/system-shell detection.
+- Shizuku User Service execution for privileged operations.
+- ADB fallback instructions for a PC.
+- Explicit capability states instead of fake buttons.
+
+## Capability states
+
+The UI distinguishes:
+
+- **Доступно** — the selected provider is currently authorized.
+- **Нужен Shizuku** — an operation needs Shizuku authorization.
+- **Нужен Shizuku или ADB на ПК** — the app cannot execute it directly with current privileges, but a generic ADB command is known.
+- **Не поддерживается** — the operation is confirmed unsupported.
+- **Не удалось определить** — the app does not have enough evidence to claim support.
+
+The project intentionally prefers an honest unknown state over guessing.
+
+## Shizuku
+
+Shizuku must be installed and authorized by the user.
+
+When authorized, Advanced Reboot starts its own Shizuku User Service and sends only the selected, hard-coded reboot command to that service. The app does not implement privilege escalation itself and never assumes that Shizuku is available.
+
+The User Service connection is treated as a separate runtime state: permission can exist while the service is still unavailable.
 
 ## ADB fallback
 
-The app shows commands that are intended for the PC's Android platform-tools terminal:
+ADB is a PC-side fallback. The app does not pretend that it can control the computer's terminal.
+
+Known generic commands:
 
 `adb reboot`
 
@@ -23,18 +46,50 @@ The app shows commands that are intended for the PC's Android platform-tools ter
 
 `adb reboot bootloader`
 
-ADB is a PC-side transport here; the app does not pretend to control the computer's terminal.
+`adb shell reboot -p`
 
-## Shizuku
-
-Shizuku must be installed and authorized by the user. On supported setups, Advanced Reboot starts its own Shizuku User Service and asks that service to execute the selected reboot command.
-
-Shizuku permissions are never assumed. If authorization is unavailable, the UI falls back to ADB instructions.
+Before using ADB, enable USB debugging, connect the device, accept the RSA prompt, and use a matching Android platform-tools installation.
 
 ## Download Mode
 
-There is intentionally no universal Download Mode command in this project. OEM/model-specific behavior will only be added after it is confirmed for the target device family.
+There is intentionally **no universal Download Mode command** in this project.
 
-## Build
+Download Mode is OEM/model-specific. Until a method is confirmed for a particular device family, the UI shows the operation as **Не удалось определить** and does not expose a guessed command.
 
-GitHub Actions runs JVM tests and produces a debug APK artifact from the repository.
+## Detection
+
+The app reads the Android manufacturer, model, Android release/API level and selected system properties used to identify common shells such as One UI, MIUI, HyperOS and OxygenOS.
+
+A shell version is only displayed when the corresponding property is present. Manufacturer-only fallback text is explicitly marked as unconfirmed.
+
+## Testing and CI
+
+GitHub Actions runs JVM unit tests, builds the debug APK, and uploads the APK as a workflow artifact.
+
+The test suite covers:
+
+- generic ADB fallback commands;
+- Shizuku provider commands;
+- Download Mode's no-guessing rule;
+- One UI / MIUI property detection;
+- unknown OEM shell handling.
+
+## Build locally
+
+Requirements:
+
+- JDK 17
+- Android SDK / platform tools
+- Gradle 8.10
+
+Run:
+
+`gradle test`
+
+Then:
+
+`gradle assembleDebug`
+
+The debug APK is produced at:
+
+`app/build/outputs/apk/debug/app-debug.apk`
