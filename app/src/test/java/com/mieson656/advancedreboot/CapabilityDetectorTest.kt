@@ -1,7 +1,9 @@
 package com.mieson656.advancedreboot
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CapabilityDetectorTest {
@@ -56,13 +58,21 @@ class CapabilityDetectorTest {
     }
 }
 
-class RebootUserServiceSecurityTest {
+class RebootCommandPolicyTest {
     @Test
-    fun rejectsCommandsOutsideAllowlist() {
-        val service = RebootUserService()
-        assertEquals("error=SecurityException: команда не разрешена", service.execute("id"))
-        assertEquals("error=SecurityException: команда не разрешена", service.execute("reboot; id"))
-        assertEquals("error=SecurityException: команда не разрешена", service.execute("reboot recovery; id"))
+    fun allowsOnlyKnownRebootCommands() {
+        assertTrue(RebootCommandPolicy.isAllowed("reboot"))
+        assertTrue(RebootCommandPolicy.isAllowed("reboot recovery"))
+        assertTrue(RebootCommandPolicy.isAllowed("reboot bootloader"))
+        assertTrue(RebootCommandPolicy.isAllowed("reboot -p"))
+    }
+
+    @Test
+    fun rejectsShellInjectionAndUnknownCommands() {
+        assertFalse(RebootCommandPolicy.isAllowed("id"))
+        assertFalse(RebootCommandPolicy.isAllowed("reboot; id"))
+        assertFalse(RebootCommandPolicy.isAllowed("reboot recovery; id"))
+        assertFalse(RebootCommandPolicy.isAllowed("reboot && id"))
     }
 }
 
