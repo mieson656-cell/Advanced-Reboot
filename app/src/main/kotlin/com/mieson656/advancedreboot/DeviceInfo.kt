@@ -33,6 +33,7 @@ object ShellDetector {
             "ro.build.version.oneui" to "One UI",
             "ro.miui.ui.version.name" to "MIUI",
             "ro.build.version.hyperos" to "HyperOS",
+            "ro.mi.os.version.name" to "HyperOS",
             "ro.oxygen.version" to "OxygenOS",
             "ro.build.ui.version" to "System UI"
         )
