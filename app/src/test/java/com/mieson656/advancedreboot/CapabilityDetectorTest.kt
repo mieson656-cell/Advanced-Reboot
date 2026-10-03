@@ -17,6 +17,16 @@ class CapabilityDetectorTest {
     }
 
     @Test
+    fun rebootUsesAndroidDirectProviderWhenDeviceOwnerIsAvailable() {
+        val c = CapabilityDetector().detect(device, false, true)
+            .first { it.operation == RebootOperation.REBOOT }
+
+        assertEquals(CapabilityState.AVAILABLE, c.state)
+        assertEquals("Device Owner", c.provider)
+        assertNull(c.providerCommand)
+    }
+
+    @Test
     fun recoveryUsesGenericAdbCommand() {
         val c = CapabilityDetector().detect(device, false).first { it.operation == RebootOperation.RECOVERY }
         assertEquals("adb reboot recovery", c.adbCommand)
